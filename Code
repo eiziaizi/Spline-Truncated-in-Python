@@ -1,0 +1,101 @@
+#Import the libraries
+import pandas as pd
+import numpy as np
+import math
+import random
+
+#turn of warning
+pd.set_option('mode.chained_assignment', None)
+
+#Find the initial knots
+
+def maxmin(x):
+    col_len = len(x[0])
+    max_x = []
+    min_x = []
+    for i in range(col_len):
+        max_x.append(max(x[:, i]))
+        min_x.append(min(x[:, i]))
+        
+    return max_x, min_x
+
+def bangkitkan_knot(mmax,mmin,nknot):
+    knots = np.zeros((n,nknot))
+    for i in range(n):
+        indeks = random.sample(range(0,101), nknot)
+        delta = (mmax[i]-mmin[i])/100
+        for j in range(nknot):
+            knots[i,j] = mmin[i] + indeks[j] * delta
+    return knots
+
+#Truncated function
+def truncated(x, knots, deg):
+    if x>knots:
+            trunc=math.pow((x-knots), deg)
+    elif x<=knots:
+            trunc=0 
+    return trunc
+
+n= int(input('banyaknya variabel = '))
+nknot = int(input('banyaknya knot = '))
+deg = int(input('derajat polinom spline= '))
+
+#Read data
+df=pd.read_csv('D:/newfix.csv', sep=';')
+data = np.array(df)
+ldata = len(data)
+x = np.array(data[:, 1:n+1]).reshape(ldata, n)
+y = np.array(data[:, 0]).reshape(ldata, 1)
+mmax, mmin = maxmin(x)
+knots = bangkitkan_knot(mmax, mmin, nknot)    
+print('knots awal = ',knots)
+
+
+#Find GCV Value
+def gcv(knots,x,y,ldata,deg):
+    nknot=knots.shape[1]
+    n=x.shape[1]
+    G=np.zeros((ldata,(deg*n)+(n*nknot)+1))
+    for j in range(n):
+        for l in range(nknot):
+            for k in range(ldata):
+                G[k,(n+(j*nknot)+l+1)]=truncated(x[k,j],knots[j,l],deg)
+                    
+
+    dosen = pd.DataFrame(G)
+    dosen_new = dosen.iloc[:, n + 1 :]
+    
+    cols = [f'X{i+1}' for i in range(n)]
+    cols_deg = [f'X{i+1}^{j+1}' for i in range(n) for j in range(deg)]
+    dfx = df[cols]
+    
+    for c in cols:
+        for d in range(deg):
+            colname = f'{c}^{d+1}'
+            dfx[colname] = df[c] ** (d+1)
+    dfx.drop(columns=cols)
+    dfx.insert(n, 'One', [1 for i in range(len(dfx))])
+    new_data = dfx.join(dosen_new)
+    b = new_data.iloc[:, n:]
+    #print(b)
+    bt=np.transpose(b)
+    Z=np.mat(bt)*np.mat(b)
+    ZI=np.linalg.pinv(Z)
+    H=np.mat(b)*(np.mat(ZI)*np.mat(bt))
+    yhat=H*y 
+    
+    Bettta=(np.mat(ZI)*np.mat(bt))*y
+    
+    mse=0    
+    for i in range (len(y)):
+        mse=(mse+((y[i]-yhat[i])**2))/len(y)
+    
+    I2=np.eye(len(H)) 
+    tt=I2-H
+    tp=np.trace(tt)
+    bawah=((1/len(y))*tp)**2
+    hasilGCV=mse/bawah
+    print('hasil gcv = ',hasilGCV)
+   
+
+print('hasil  = ',gcv(knots,x,y,ldata,deg))
